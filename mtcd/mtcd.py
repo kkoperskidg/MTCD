@@ -47,40 +47,18 @@ def waitForWorkflow( workflow ):
 		except:
 			sys.stdout.write('.')
 
-def aopImage(catalog_id, s3_location, local_dir = None, ms = True, pan = False, pansharpen = False, panSharpenedRGB = False, panPixelSize = 0.5, dem = None, clip = None):
+def aopImage(catalog_id, s3_location, local_dir = None, ms = True, panPixelSize = 0.5, clip = None):
 	gbdx = Interface()
 	isWV1 = catalog_id.startswith( '102' )
-	if ( isWV1 and ( ms or pansharpen or pansharpenship or panSharpenedRGB )  ):
-		print "WARNING is a WV1 image and MS or Pansharpened image can't be ordered"
+	if ( isWV1 ):
+		print("WARNING is a WV1 image and MS or Pansharpened image can't be ordered")
 	isSWIR = catalog_id.startswith( '104A' )
 	if ( isSWIR ):
-		print "ERROR SWIR image can't be orthorectified"
+		print("ERROR SWIR image can't be orthorectified")
 		return
 	order_id = order(gbdx, catalog_id)
 	data = gbdx.ordering.status(order_id)[0]['location']
 	gdalwarpOptions = "  -r near --config GDAL_CACHEMAX 4000 -wm 4000 -co TILED=TRUE -co COMPRESS=PACKBITS -co BIGTIFF=YES "
-	if ( pansharpen and not isWV1 ):
-		aoptask1 = gbdx.Task("AOP_Strip_Processor", data=data, enable_acomp=True, enable_pansharpen=True, bands="PAN+MS", enable_dra=False, ortho_epsg='UTM', ortho_pixel_size=str(panPixelSize), ortho_dem_specifier = dem )
-		if ( clip is not None ):
-			clipTask1 = gbdx.Task("gdalcrop", image=aoptask1.outputs.data, crop=clip+' -tr '+str(panPixelSize)+' '+str(panPixelSize)+gdalwarpOptions, ship = 'false')
-			workflow1 = gbdx.Workflow([ aoptask1, clipTask1 ])
-			workflow1.savedata(clipTask1.outputs.cropped, location=s3_location+'PS')
-		else:
-			workflow1 = gbdx.Workflow([ aoptask1 ])
-			workflow1.savedata(aoptask1.outputs.data, location=s3_location+'PS')
-		workflow1.execute()
-		print 'AOP is processing image '+catalog_id+' PSH workflow id is '+workflow1.id
-	if ( pan ):
-		aoptask2 = gbdx.Task("AOP_Strip_Processor", data=data, enable_acomp=False, enable_pansharpen=False, enable_dra=False, ortho_epsg='UTM', bands='PAN', ortho_pixel_size=str(panPixelSize), ortho_dem_specifier = dem)
-		if ( clip is not None ):
-			clipTask2 = gbdx.Task("gdalcrop", image=aoptask2.outputs.data, crop=clip+' -tr '+str(panPixelSize)+' '+str(panPixelSize)+gdalwarpOptions, ship = 'false')
-			workflow2 = gbdx.Workflow([ aoptask2, clipTask2 ])
-			workflow2.savedata(clipTask2.outputs.cropped, location=s3_location+'PAN')
-		else:
-			workflow2 = gbdx.Workflow([ aoptask2 ])
-			workflow2.savedata(aoptask2.outputs.data, location=s3_location+'PAN')
-		workflow2.execute()
-		print 'AOP is processing image '+catalog_id+' PAN workflow id is '+workflow2.id
 	if ( ms and not isWV1 ):
 		aoptask3 = gbdx.Task("AOP_Strip_Processor", data=data, enable_acomp=True, enable_pansharpen=False, enable_dra=False, ortho_epsg='UTM', bands='MS', ortho_pixel_size=str(4*panPixelSize), ortho_dem_specifier = dem)
 		if ( clip is not None ):
@@ -91,20 +69,7 @@ def aopImage(catalog_id, s3_location, local_dir = None, ms = True, pan = False, 
 			workflow3 = gbdx.Workflow([ aoptask3 ])
 			workflow3.savedata(aoptask3.outputs.data, location=s3_location+'MS')
 		workflow3.execute()
-		print 'AOP is processing image '+catalog_id+' MS workflow id is '+workflow3.id
-	if ( panSharpenedRGB and not isWV1 ):
-		pixelSize = 4*panPixelSize
-		pixelSize = panPixelSize
-		aoptask4 = gbdx.Task("AOP_Strip_Processor", data=data, ortho_epsg='UTM', ortho_pixel_size=str(pixelSize), ortho_dem_specifier = dem)
-		if ( clip is not None ):
-			clipTask4 = gbdx.Task("gdalcrop", image=aoptask4.outputs.data, crop=clip+' -tr '+str(pixelSize)+' '+str(pixelSize)+gdalwarpOptions, ship = 'false')
-			workflow4 = gbdx.Workflow([ aoptask4, clipTask4 ])
-			workflow4.savedata(clipTask4.outputs.cropped, location=s3_location+'RGB')
-		else:
-			workflow4 = gbdx.Workflow([ aoptask4 ])
-			workflow4.savedata(aoptask4.outputs.data, location=s3_location+'RGB')
-		workflow4.execute()
-		print 'AOP is processing image '+catalog_id+' RGB workflow id is '+workflow4.id
+		print('AOP is processing image '+catalog_id+' MS workflow id is '+workflow3.id)
 	if ( ms ):
 		complete = False
 		while not complete:
@@ -114,45 +79,15 @@ def aopImage(catalog_id, s3_location, local_dir = None, ms = True, pan = False, 
 					time.sleep(60)
 			except:
 				sys.stdout.write('.')
-		print 'MS      image '+catalog_id+' '+ str(workflow3.status) + ' at '+str(datetime.now())
-	if ( panSharpenedRGB ):
-		complete = False
-		while not complete:
-			try:
-				complete = workflow4.complete
-				if not complete:
-					time.sleep(60)
-			except:
-				sys.stdout.write('.')
-		print 'RGB      image '+catalog_id+' '+ str(workflow4.status) + ' at '+str(datetime.now())
-	if ( pan ):
-		complete = False
-		while not complete:
-			try:
-				complete = workflow2.complete
-				if not complete:
-					time.sleep(60)
-			except:
-				sys.stdout.write('.')
-		print 'Pan     image '+catalog_id+' '+ str(workflow2.status) + ' at '+str(datetime.now())
-	if ( pansharpen ):
-		complete = False
-		while not complete:
-			try:
-				complete = workflow1.complete
-				if not complete:
-					time.sleep(60)
-			except:
-				sys.stdout.write('.')
-		print 'Panshrp image '+catalog_id+' '+ str(workflow1.status) + ' at '+str(datetime.now())
+		print('MS      image '+catalog_id+' '+ str(workflow3.status) + ' at '+str(datetime.now()))
 	if local_dir == '':
 		return
 	if ( local_dir is not None ):
-		print 'Downloading AOP images'
+		print('Downloading AOP images')
 		if not os.path.exists(local_dir):
 			os.makedirs(local_dir)
 		gbdx.s3.download(location=s3_location, local_dir=local_dir)
-		print 'Image downloaded'+catalog_id + ' at '+str(datetime.now())
+		print('Image downloaded'+catalog_id + ' at '+str(datetime.now()))
 
 	return
 
@@ -173,7 +108,7 @@ def runMTCD( s3_locationPre, s3_locationPost, out_s3_location ):
 	wfl = gbdx.Workflow([tsk])
 	wfl.savedata(tsk.outputs.data, location=out_s3_location)
 	wfl.execute()
-	print 'MTCD image pair start '+s3_locationPre+' '+s3_locationPost+' '+out_s3_location+' '+str(wfl.id) + ' at '+str(datetime.now())
+	print('MTCD image pair start '+s3_locationPre+' '+s3_locationPost+' '+out_s3_location+' '+str(wfl.id) + ' at '+str(datetime.now()))
 	complete = False
 	while not complete:
 		try:
@@ -182,7 +117,7 @@ def runMTCD( s3_locationPre, s3_locationPost, out_s3_location ):
 				time.sleep(60)
 		except:
 			sys.stdout.write('.')
-	print 'MTCD image pair done '+s3_locationPre+' '+s3_locationPost+' '+out_s3_location+' '+str(wfl.status) + ' at '+str(datetime.now())
+	print('MTCD image pair done '+s3_locationPre+' '+s3_locationPost+' '+out_s3_location+' '+str(wfl.status) + ' at '+str(datetime.now()))
 	if ( not wfl.status["event"] == "succeeded" ):
 		return 1
 	return 0
@@ -203,7 +138,7 @@ def runMTCDmosaic( id, s3_location ):
 	wfl = gbdx.Workflow([tsk])
 	wfl.savedata(tsk.outputs.data, location=s3_location + "/image2image/")
 	wfl.execute()
-	print 'MTCD mosaic start', id, images, wfl.id
+	print('MTCD mosaic start', id, images, wfl.id)
 	complete = False
 	while not complete:
 		try:
@@ -212,9 +147,9 @@ def runMTCDmosaic( id, s3_location ):
 				time.sleep(10)
 		except:
 			sys.stdout.write('.')
-	print 'MTCD mosaic done ' + images + ' ' + str(id) + ' ' + str(wfl.status) + ' at ' + str(datetime.now())
+	print('MTCD mosaic done ' + images + ' ' + str(id) + ' ' + str(wfl.status) + ' at ' + str(datetime.now()))
 	if (not wfl.status["event"] == "succeeded"):
-		print 'MTCD mosaic failed'
+		print('MTCD mosaic failed')
 		return 1
 	return 0
 
@@ -233,12 +168,12 @@ def runMTCDmosaicPre( id, s3_location ):
 		images3 = getS3location(gbdx, s3_location + "/3")
 		tsk = gbdx.Task('mtcdvrt', images1=images1, images2=images2, images3=images3, id="pre")
 	else:
-		print "Wrong id in runMTCDmosaicPre", id
+		print("Wrong id in runMTCDmosaicPre", id)
 		return 1
 	wfl = gbdx.Workflow([tsk])
 	wfl.savedata(tsk.outputs.data, location=s3_location + "/image2image/")
 	wfl.execute()
-	print 'MTCD mosaic start', id, images1, wfl.id
+	print('MTCD mosaic start', id, images1, wfl.id)
 	complete = False
 	while not complete:
 		try:
@@ -247,9 +182,9 @@ def runMTCDmosaicPre( id, s3_location ):
 				time.sleep(10)
 		except:
 			sys.stdout.write('.')
-	print 'MTCD mosaic done ' + images1 + ' ' + images2 + ' ' + str(id) + ' ' + str(wfl.status) + ' at ' + str(datetime.now())
+	print('MTCD mosaic done ' + images1 + ' ' + images2 + ' ' + str(id) + ' ' + str(wfl.status) + ' at ' + str(datetime.now()))
 	if (not wfl.status["event"] == "succeeded"):
-		print 'MTCD mosaic failed'
+		print('MTCD mosaic failed')
 		return 1
 	return 0
 
@@ -270,11 +205,11 @@ def changePrep( catalog_id, s3_location, clip = None ):
 	gbdx = Interface()
 	isWV1 = catalog_id.startswith( '102' )
 	if ( isWV1 and ( ms or pansharpen or pansharpenship )  ):
-		print "ERROR Image is a WV1 image."
+		print("ERROR Image is a WV1 image.")
 		return
 	isSWIR = catalog_id.startswith( '104A' )
 	if ( isSWIR ):
-		print "ERROR Image is a WV1 image."
+		print("ERROR Image is a WV1 image.")
 		return
 	order_id = order(gbdx, catalog_id)
 	data = gbdx.ordering.status(order_id)[0]['location']
@@ -295,7 +230,7 @@ def changePrep( catalog_id, s3_location, clip = None ):
 		workflow = gbdx.Workflow([ aoptask, topoTask, cloudTask ])
 		workflow.savedata(cloudTask.outputs.mask, location=s3_location)
 	workflow.execute()
-	print 'AOP is processing image '+catalog_id+' MS workflow id is '+workflow.id
+	print('AOP is processing image '+catalog_id+' MS workflow id is '+workflow.id)
 	complete = False
 	while not complete:
 		try:
@@ -304,9 +239,9 @@ def changePrep( catalog_id, s3_location, clip = None ):
 				time.sleep(60)
 		except:
 			sys.stdout.write('.')
-	print 'MS      image '+catalog_id+' '+ str(workflow.status) + ' wfl id '+ workflow.id + ' at '+str(datetime.now())
+	print('MS      image '+catalog_id+' '+ str(workflow.status) + ' wfl id '+ workflow.id + ' at '+str(datetime.now()))
 	if ( not workflow.status["event"] == "succeeded" ):
-		print "workflow.status", workflow.status, workflow.status["event"] == "succeeded"
+		print("workflow.status", workflow.status, workflow.status["event"] == "succeeded")
 		return 1
 	return 0
 
@@ -337,8 +272,7 @@ def processChangeSet( idsets, s3_location, clip = None, deleteIntermediateFromS3
 		for catid in idset:
 			ids.append(catid)
 
-	''' '''
-	print "AOP, Topocorrection, Cloud punching"
+	print("AOP, Topocorrection, Cloud punching")
 	threads = []
 	id = 0
 	for idset in idsets:
@@ -355,14 +289,13 @@ def processChangeSet( idsets, s3_location, clip = None, deleteIntermediateFromS3
 	for thread in threads:
 		ret = thread.join()
 		i += 1
-		print str(i)+" out of "+str(nThreads)+" threads done"
+		print(str(i)+" out of "+str(nThreads)+" threads done")
 		if (ret != 0):
-			print "ChangePrep error", ret
+			print("ChangePrep error", ret)
 			return 1
-	print 'AOP/Topo/CloudDet done. Elapsed time: {} min'.format(round((time.time() - start_time)/60))
-	''' '''
+	print('AOP/Topo/CloudDet done. Elapsed time: {} min'.format(round((time.time() - start_time)/60)))
 
-	print "mosaicking"
+	print("mosaicking")
 	id = 0
 	threads = []
 	if ( len (idsets) == 4 ):
@@ -382,12 +315,11 @@ def processChangeSet( idsets, s3_location, clip = None, deleteIntermediateFromS3
 	for thread in threads:
 		ret = thread.join()
 		i += 1
-		print str(i) + " out of " + str(nThreads) + " threads done. Return ", ret
+		print(str(i) + " out of " + str(nThreads) + " threads done. Return ", ret)
 		if (ret != 0):
-			print "MTCDmosaic error", ret
+			print("MTCDmosaic error", ret)
 			return 1
-	print 'mtcdvrt done. Elapsed time: {} min'.format(round((time.time() - start_time)/60))
-	''' '''
+	print('mtcdvrt done. Elapsed time: {} min'.format(round((time.time() - start_time)/60)))
 
 	threads = []
 	id = 0
@@ -399,26 +331,25 @@ def processChangeSet( idsets, s3_location, clip = None, deleteIntermediateFromS3
 		thread = startimage2imageThread(s3_location+"/image2image/pre.tif", s3_location+"/image2image/"+str(id)+".tif", s3_location+"/image2imageFinal/"+str(id), clip = clip, fileName = fileName )
 		threads.append(thread)
 		time.sleep(2)
-	print "image2image"
+	print("Running image2image alignment")
 	nThreads = len(threads)
 	i = 0
 	for thread in threads:
 		ret = thread.join()
 		i += 1
-		print str(i)+" out of "+str(nThreads)+" threads done. Return ",ret
+		print(str(i)+" out of "+str(nThreads)+" threads done. Return ",ret)
 		if (ret != 0):
-			print "image2image error", ret
+			print("image2image error", ret)
 			return 1
 
-	''' '''
-	print 'Image2image done. Elapsed time: {} min'.format(round((time.time() - start_time)/60))
+	print('Image2image done. Elapsed time: {} min'.format(round((time.time() - start_time)/60)))
 	gbdx = Interface()
 	watertsk = gbdx.Task('kk-watermask')
 	watertsk.inputs.image = getS3location(gbdx, s3_location + "/image2imageFinal/1")
 	waterwfl = gbdx.Workflow([watertsk])
 	waterwfl.savedata(watertsk.outputs.mask, location=s3_location + "/waterMask" )
 	waterwfl.execute()
-	print 'Water mask task start ' + str(waterwfl.id) + ' at ' + str(datetime.now())
+	print('Water mask task start ' + str(waterwfl.id) + ' at ' + str(datetime.now()))
 
 	nImages = len(idsets)
 	threads = []
@@ -431,17 +362,17 @@ def processChangeSet( idsets, s3_location, clip = None, deleteIntermediateFromS3
 	for thread in threads:
 		ret = thread.join()
 		i += 1
-		print str(i)+" out of "+str(nThreads)+" threads done. Return ",ret
+		print(str(i)+" out of "+str(nThreads)+" threads done. Return ",ret)
 		if (ret != 0):
-			print "MTCDThread error", ret
+			print("MTCDThread error", ret)
 			return 1
-	print 'Image pair change done. Elapsed time: {} min'.format(round((time.time() - start_time)/60))
+	print('Image pair change done. Elapsed time: {} min'.format(round((time.time() - start_time)/60)))
 
 	if (deleteIntermediateFromS3):
 		deleteFromS3(s3_location+"/image2imageFinal/")
 		deleteFromS3(s3_location+"/image2image/")
 	waitForWorkflow( waterwfl )
-	print 'Water mask task done '+ str(waterwfl.status) + ' at ' + str(datetime.now())
+	print('Water mask task done '+ str(waterwfl.status) + ' at ' + str(datetime.now()))
 	gbdx = Interface()
 	changeImages = getS3location(gbdx, s3_location + "/changePairs/")
 	maskFolder = getS3location(gbdx, s3_location + "/waterMask")
@@ -449,23 +380,23 @@ def processChangeSet( idsets, s3_location, clip = None, deleteIntermediateFromS3
 	wfl = gbdx.Workflow([tsk])
 	wfl.savedata(tsk.outputs.data, location=s3_location + "/change/")
 	wfl.execute()
-	print 'MTCD time filter start ' + str(wfl.id) + ' at ' + str(datetime.now())
+	print('MTCD time filter start ' + str(wfl.id) + ' at ' + str(datetime.now()))
 	waitForWorkflow( wfl )
-	print 'MTCD time filter done '+ str(wfl.status) + ' at ' + str(datetime.now())
+	print('MTCD time filter done '+ str(wfl.status) + ' at ' + str(datetime.now()))
 
 	if (deleteIntermediateFromS3):
 		deleteFromS3(s3_location+"/changePairs/")
 		deleteFromS3(s3_location + "/waterMask/")
-	print 'MTCD change ALL processes done. Elapsed time: {} min'.format(round((time.time() - start_time)/60))
-	print "All done " + wfl.status['event']
+	print('MTCD change ALL processes done. Elapsed time: {} min'.format(round((time.time() - start_time)/60)))
+	print("All done " + wfl.status['event'])
 	return 0
 
 def order(gbdx, catalog_id):
 	order_id = gbdx.ordering.order(catalog_id)
 	if ( order_id == None ):
-		print 'Can not order '+ catalog_id
+		print('Can not order '+ catalog_id)
 		return none
-	print 'Ordering ' + catalog_id + ' order_id ' + order_id + ' at '+str(datetime.now())
+	print('Ordering ' + catalog_id + ' order_id ' + order_id + ' at '+str(datetime.now()))
 	status = ''
 	while status != 'delivered':
 		try:
@@ -474,7 +405,7 @@ def order(gbdx, catalog_id):
 				time.sleep(60)
 		except:
 			sys.stdout.write('.')
-	print '1B image delivered ' + gbdx.ordering.status(order_id)[0]['location'] + ' at '+str(datetime.now())
+	prin('1B image delivered ' + gbdx.ordering.status(order_id)[0]['location'] + ' at '+str(datetime.now()))
 	return order_id
 
 def image2image(ref_image_s3_dir, image_s3_dir, output_s3, source_filename=None, reference_filename=None, clip=None, pixelSize=2, fileName = None ):
@@ -496,18 +427,11 @@ def image2image(ref_image_s3_dir, image_s3_dir, output_s3, source_filename=None,
 
 	workflow.execute()
 
-	print "full_ref_image_s3_dir", full_ref_image_s3_dir
-	print "full_2nd_image_s3_dir", full_image_s3_dir
-	print "source_filename", source_filename
-	print "reference_filename", reference_filename
-	print "output_s3", output_s3
-	print "clip", clip
-
-	print 'image2Image ' + ref_image_s3_dir + ' ' + image_s3_dir + ' ' + output_s3 + ' ' + fileName + ' workflow ' + str(
-		workflow.id) + ' started at ' + str(datetime.now())
+	print('image2Image ' + ref_image_s3_dir + ' ' + image_s3_dir + ' ' + output_s3 + ' ' + fileName + ' workflow ' + str(
+		workflow.id) + ' started at ' + str(datetime.now()))
 	waitForWorkflow(workflow)
-	print 'image2Image ' + str(workflow.id) + ' ' + ref_image_s3_dir + ' ' + image_s3_dir + ' ' + output_s3 + ' ' + str(
-		workflow.status) + ' at ' + str(datetime.now())
+	print('image2Image ' + str(workflow.id) + ' ' + ref_image_s3_dir + ' ' + image_s3_dir + ' ' + output_s3 + ' ' + str(
+		workflow.status) + ' at ' + str(datetime.now()))
 	if (not workflow.status["event"] == "succeeded"):
 		return 1
 	return 0
@@ -547,8 +471,8 @@ def image2images(catalog_ids_file, ref_image_s3_dir, image_s3_dir, output_s3, ms
 	for thread in threads:
 		thread.join()
 		i += 1
-		print str(i) + " out of " + str(nThreads) + " threads done"
-	print "All done"
+		print(str(i) + " out of " + str(nThreads) + " threads done")
+	print("All done")
 
 def image2imageThread(ref_image_s3_dir, image_s3_dir, output_s3, source_filename=None, reference_filename=None, clip=None, pixelSize=2, fileName = None):
 	ret = image2image(ref_image_s3_dir, image_s3_dir, output_s3, source_filename=source_filename,
@@ -563,7 +487,6 @@ def startimage2imageThread(ref_image_s3_dir, image_s3_dir, output_s3, source_fil
 
 def printTaskOutput( gbdx, workflow ):
     url = "https://geobigdata.io/workflows/v1/workflows/%s" % workflow.id
-    print url
     resp = gbdx.gbdx_connection.get(url)
     resp.raise_for_status()
     wf = resp.json()
@@ -577,14 +500,14 @@ def printTaskOutput( gbdx, workflow ):
         hurl = "https://geobigdata.io/workflows/v1/workflows/%s/tasks/%s/stderr" % (workflow.id, task["id"])
         h = gbdx.gbdx_connection.get(hurl)
         h.raise_for_status()
-        print "-----------------------------------------------------------------------"
-        print "TASK"
-        print task["name"]
-        print "STDOUT"
-        print r.text
-        print "STDERR"
-        print h.text
-        print "\n"
+        print("-----------------------------------------------------------------------")
+        print("TASK")
+        print(task["name"])
+        print("STDOUT")
+        print(r.text)
+        print("STDERR")
+        print(h.text)
+        print("\n")
 		
 def pri( workflowID ):
 	printTaskOutputForID( workflowID )
@@ -592,7 +515,7 @@ def pri( workflowID ):
 def printTaskOutputForID( workflowID ):
     gbdx = Interface()
     url = "https://geobigdata.io/workflows/v1/workflows/%s" % workflowID
-    print url
+    print(url)
     resp = gbdx.gbdx_connection.get(url)
     resp.raise_for_status()
     wf = resp.json()
@@ -606,14 +529,14 @@ def printTaskOutputForID( workflowID ):
         hurl = "https://geobigdata.io/workflows/v1/workflows/%s/tasks/%s/stderr" % (workflowID, task["id"])
         h = gbdx.gbdx_connection.get(hurl)
         h.raise_for_status()
-        print "-----------------------------------------------------------------------"
-        print "TASK"
-        print task["name"]
-        print "STDOUT"
-        print r.text
-        print "STDERR"
-        print h.text
-        print "\n"
+        print("-----------------------------------------------------------------------")
+        print("TASK")
+        print(task["name"])
+        print("STDOUT")
+        print(r.text)
+        print("STDERR")
+        print(h.text)
+        print("\n")
 		
 def getS3location(gbdx, location):
 	#return 's3://gbd-customer-data/c8f66cb2-dac0-4883-8d93-12d68de252fe/'+ location
@@ -627,18 +550,18 @@ def getS3location(gbdx, location):
 		exists = True
 		break
 	if not exists:
-		print "WARNING!!!!! " + location + " does not exist"
+		print("WARNING!!!!! " + location + " does not exist")
 	return 's3://'+gbdx.s3.info['bucket'] +'/'+ gbdx.s3.info['prefix'] +'/'+ location
 	
 def getUTMbox( xmin, ymin, xmax, ymax, zone = None):
 	if xmax < xmin:
-		print "wrong coordinates xmax < xmin"
+		print("wrong coordinates xmax < xmin")
 	if ymax < ymin:
-		print "wrong coordinates ymax < ymin"
+		print("wrong coordinates ymax < ymin")
 	if ymax < -80 or ymin > 84:
-		print "wrong coordinates y must be between -80 and 84"
+		print("wrong coordinates y must be between -80 and 84")
 	if ymax < -180 or ymin > 180:
-		print "wrong coordinates x must be between -180 and 180"
+		print("wrong coordinates x must be between -180 and 180")
 	if ( zone == None ):
 		median = (xmin + xmax) / 2;
 		zone = math.floor((median + 180.0) / 6.0) + 1;
@@ -648,7 +571,7 @@ def getUTMbox( xmin, ymin, xmax, ymax, zone = None):
 	p = pyproj.Proj("+proj=utm +zone="+str(zone)+" +datum=WGS84"+hemisphere)
 	xminUTM, yminUTM = p(xmin, ymin, inverse=False)
 	xmaxUTM, ymaxUTM = p(xmax, ymax, inverse=False)
-	print "Zone "+str(int(zone)) + " lon in m " + str(int(xmaxUTM-xminUTM)) + " lat in m " + str(int(ymaxUTM-yminUTM))
+	print("Zone "+str(int(zone)) + " lon in m " + str(int(xmaxUTM-xminUTM)) + " lat in m " + str(int(ymaxUTM-yminUTM)))
 	return str(xminUTM)+' '+str(yminUTM)+' '+str(xmaxUTM)+' '+str(ymaxUTM)
 
 def getUTMwithProjection( xmin, ymin, xmax, ymax):
@@ -656,13 +579,13 @@ def getUTMwithProjection( xmin, ymin, xmax, ymax):
 
 def getUTMZoneProjection( xmin, ymin, xmax, ymax):
 	if xmax < xmin:
-		print "wrong coordinates xmax < xmin"
+		print("wrong coordinates xmax < xmin")
 	if ymax < ymin:
-		print "wrong coordinates ymax < ymin"
+		print("wrong coordinates ymax < ymin")
 	if ymax < -80 or ymin > 84:
-		print "wrong coordinates y must be between -80 and 84"
+		print("wrong coordinates y must be between -80 and 84")
 	if ymax < -180 or ymin > 180:
-		print "wrong coordinates x must be between -180 and 180"
+		print("wrong coordinates x must be between -180 and 180")
 	median = (xmin + xmax) / 2;
 	zone = math.floor((median + 180.0) / 6.0) + 1;
 	hemisphere = " +north"
@@ -693,8 +616,8 @@ def deleteFromS3(location):
 
 	whats_in_there = bucket.list(prefix + '/' + location)
 	key = Key(bucket, prefix + '/' + location)
-	print key.name
+	print(key.name)
 	if not key.exists():
-		print "key " + location + " does not exist"
+		print("key " + location + " does not exist")
 	for key in whats_in_there:
 		bucket.delete_key(key)
