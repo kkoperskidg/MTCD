@@ -1,0 +1,4 @@
+include README.md
+recursive-include mtcd *
+include requirements.txt
+recursive-exclude tests *
