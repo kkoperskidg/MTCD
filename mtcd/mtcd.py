@@ -29,11 +29,11 @@ class FuncThread(threading.Thread):
 		threading.Thread.join(self)
 		return self._return
 
-def aopImageThread(catalog_id, s3_location, ms, pan, pansharpen, panSharpenedRGB, panPixelSize, dem, clip):
-	aopImage(catalog_id, s3_location, local_dir = None, ms = ms, pan = pan, pansharpen = pansharpen, panSharpenedRGB = panSharpenedRGB, panPixelSize = panPixelSize, dem = dem, clip = clip)
+def aopImageThread(catalog_id, s3_location, panPixelSize, clip):
+	aopImage(catalog_id, s3_location, local_dir = None, panPixelSize = panPixelSize, clip = clip)
 	
-def startAopImageThread(catalog_id, s3_location, ms, pan, pansharpen, panSharpenedRGB, panPixelSize, dem, clip):
-	t1 = FuncThread(aopImageThread, catalog_id, s3_location, ms, pan, pansharpen, panSharpenedRGB, panPixelSize, dem, clip)
+def startAopImageThread(catalog_id, s3_location, panPixelSize, clip):
+	t1 = FuncThread(aopImageThread, catalog_id, s3_location, panPixelSize, clip)
 	t1.start()
 	return t1
 
@@ -47,7 +47,7 @@ def waitForWorkflow( workflow ):
 		except:
 			sys.stdout.write('.')
 
-def aopImage(catalog_id, s3_location, local_dir = None, ms = True, panPixelSize = 0.5, clip = None):
+def aopImage(catalog_id, s3_location, local_dir = None,  panPixelSize = 0.5, clip = None):
 	gbdx = Interface()
 	isWV1 = catalog_id.startswith( '102' )
 	if ( isWV1 ):
@@ -59,27 +59,18 @@ def aopImage(catalog_id, s3_location, local_dir = None, ms = True, panPixelSize 
 	order_id = order(gbdx, catalog_id)
 	data = gbdx.ordering.status(order_id)[0]['location']
 	gdalwarpOptions = "  -r near --config GDAL_CACHEMAX 4000 -wm 4000 -co TILED=TRUE -co COMPRESS=PACKBITS -co BIGTIFF=YES "
-	if ( ms and not isWV1 ):
-		aoptask3 = gbdx.Task("AOP_Strip_Processor", data=data, enable_acomp=True, enable_pansharpen=False, enable_dra=False, ortho_epsg='UTM', bands='MS', ortho_pixel_size=str(4*panPixelSize), ortho_dem_specifier = dem)
-		if ( clip is not None ):
-			clipTask3 = gbdx.Task("gdalcrop", image=aoptask3.outputs.data, crop=clip+' -tr '+str(4*panPixelSize)+' '+str(4*panPixelSize)+gdalwarpOptions, ship = 'false')
-			workflow3 = gbdx.Workflow([ aoptask3, clipTask3 ])
-			workflow3.savedata(clipTask3.outputs.cropped, location=s3_location+'MS')
-		else:
-			workflow3 = gbdx.Workflow([ aoptask3 ])
-			workflow3.savedata(aoptask3.outputs.data, location=s3_location+'MS')
-		workflow3.execute()
-		print('AOP is processing image '+catalog_id+' MS workflow id is '+workflow3.id)
-	if ( ms ):
-		complete = False
-		while not complete:
-			try:
-				complete = workflow3.complete
-				if not complete:
-					time.sleep(60)
-			except:
-				sys.stdout.write('.')
-		print('MS      image '+catalog_id+' '+ str(workflow3.status) + ' at '+str(datetime.now()))
+    aoptask3 = gbdx.Task("AOP_Strip_Processor", data=data, enable_acomp=True, enable_pansharpen=False, enable_dra=False, ortho_epsg='UTM', bands='MS', ortho_pixel_size=str(4*panPixelSize), ortho_dem_specifier = dem)
+	if ( clip is not None ):
+		clipTask3 = gbdx.Task("gdalcrop", image=aoptask3.outputs.data, crop=clip+' -tr '+str(4*panPixelSize)+' '+str(4*panPixelSize)+gdalwarpOptions, ship = 'false')
+		workflow = gbdx.Workflow([ aoptask3, clipTask3 ])
+		workflow.savedata(clipTask3.outputs.cropped, location=s3_location+'MS')
+	else:
+		workflow = gbdx.Workflow([ aoptask3 ])
+		workflow.savedata(aoptask3.outputs.data, location=s3_location+'MS')
+	workflow.execute()
+	print('AOP is processing image '+catalog_id+' MS workflow id is '+workflow.id)
+	waitForWorkflow( workflow ):
+	print('MS      image '+catalog_id+' '+ str(workflow.status) + ' at '+str(datetime.now()))
 	if local_dir == '':
 		return
 	if ( local_dir is not None ):
