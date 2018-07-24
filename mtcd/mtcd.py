@@ -59,17 +59,17 @@ def aopImage(catalog_id, s3_location, local_dir = None,  panPixelSize = 0.5, cli
 	order_id = order(gbdx, catalog_id)
 	data = gbdx.ordering.status(order_id)[0]['location']
 	gdalwarpOptions = "  -r near --config GDAL_CACHEMAX 4000 -wm 4000 -co TILED=TRUE -co COMPRESS=PACKBITS -co BIGTIFF=YES "
-    aoptask3 = gbdx.Task("AOP_Strip_Processor", data=data, enable_acomp=True, enable_pansharpen=False, enable_dra=False, ortho_epsg='UTM', bands='MS', ortho_pixel_size=str(4*panPixelSize), ortho_dem_specifier = dem)
+	aoptask = gbdx.Task("AOP_Strip_Processor", data=data, enable_acomp=True, enable_pansharpen=False, enable_dra=False, ortho_epsg='UTM', bands='MS', ortho_pixel_size=str(4*panPixelSize), ortho_dem_specifier = dem)
 	if ( clip is not None ):
-		clipTask3 = gbdx.Task("gdalcrop", image=aoptask3.outputs.data, crop=clip+' -tr '+str(4*panPixelSize)+' '+str(4*panPixelSize)+gdalwarpOptions, ship = 'false')
-		workflow = gbdx.Workflow([ aoptask3, clipTask3 ])
-		workflow.savedata(clipTask3.outputs.cropped, location=s3_location+'MS')
+		clipTask = gbdx.Task("gdalcrop", image=aoptask.outputs.data, crop=clip+' -tr '+str(4*panPixelSize)+' '+str(4*panPixelSize)+gdalwarpOptions, ship = 'false')
+		workflow = gbdx.Workflow([ aoptask, clipTask ])
+		workflow.savedata(clipTask.outputs.cropped, location=s3_location+'MS')
 	else:
-		workflow = gbdx.Workflow([ aoptask3 ])
-		workflow.savedata(aoptask3.outputs.data, location=s3_location+'MS')
+		workflow = gbdx.Workflow([ aoptask ])
+		workflow.savedata(aoptask.outputs.data, location=s3_location+'MS')
 	workflow.execute()
 	print('AOP is processing image '+catalog_id+' MS workflow id is '+workflow.id)
-	waitForWorkflow( workflow ):
+	waitForWorkflow( workflow )
 	print('MS      image '+catalog_id+' '+ str(workflow.status) + ' at '+str(datetime.now()))
 	if local_dir == '':
 		return
@@ -96,20 +96,13 @@ def runMTCD( s3_locationPre, s3_locationPost, out_s3_location ):
 	preimage = getS3location(gbdx, s3_locationPre)
 	postimage = getS3location(gbdx, s3_locationPost)
 	tsk = gbdx.Task('mtcd', preimage=preimage, postimage=postimage)
-	wfl = gbdx.Workflow([tsk])
-	wfl.savedata(tsk.outputs.data, location=out_s3_location)
-	wfl.execute()
-	print('MTCD image pair start '+s3_locationPre+' '+s3_locationPost+' '+out_s3_location+' '+str(wfl.id) + ' at '+str(datetime.now()))
-	complete = False
-	while not complete:
-		try:
-			complete = wfl.complete
-			if not complete:
-				time.sleep(60)
-		except:
-			sys.stdout.write('.')
-	print('MTCD image pair done '+s3_locationPre+' '+s3_locationPost+' '+out_s3_location+' '+str(wfl.status) + ' at '+str(datetime.now()))
-	if ( not wfl.status["event"] == "succeeded" ):
+	workflow = gbdx.Workflow([tsk])
+	workflow.savedata(tsk.outputs.data, location=out_s3_location)
+	workflow.execute()
+	print('MTCD image pair start '+s3_locationPre+' '+s3_locationPost+' '+out_s3_location+' '+str(workflow.id) + ' at '+str(datetime.now()))
+	waitForWorkflow( workflow )
+	print('MTCD image pair done '+s3_locationPre+' '+s3_locationPost+' '+out_s3_location+' '+str(workflow.status) + ' at '+str(datetime.now()))
+	if ( not workflow.status["event"] == "succeeded" ):
 		return 1
 	return 0
 
@@ -126,20 +119,13 @@ def runMTCDmosaic( id, s3_location ):
 	gbdx = Interface()
 	images = getS3location(gbdx, s3_location + "/" + str(id))
 	tsk = gbdx.Task('mtcdvrt', images1=images, id=str(id))
-	wfl = gbdx.Workflow([tsk])
-	wfl.savedata(tsk.outputs.data, location=s3_location + "/image2image/")
-	wfl.execute()
-	print('MTCD mosaic start', id, images, wfl.id)
-	complete = False
-	while not complete:
-		try:
-			complete = wfl.complete
-			if not complete:
-				time.sleep(10)
-		except:
-			sys.stdout.write('.')
-	print('MTCD mosaic done ' + images + ' ' + str(id) + ' ' + str(wfl.status) + ' at ' + str(datetime.now()))
-	if (not wfl.status["event"] == "succeeded"):
+	workflow = gbdx.Workflow([tsk])
+	workflow.savedata(tsk.outputs.data, location=s3_location + "/image2image/")
+	workflow.execute()
+	print('MTCD mosaic start', id, images, workflow.id)
+	waitForWorkflow( workflow )
+	print('MTCD mosaic done ' + images + ' ' + str(id) + ' ' + str(workflow.status) + ' at ' + str(datetime.now()))
+	if (not workflow.status["event"] == "succeeded"):
 		print('MTCD mosaic failed')
 		return 1
 	return 0
@@ -161,20 +147,13 @@ def runMTCDmosaicPre( id, s3_location ):
 	else:
 		print("Wrong id in runMTCDmosaicPre", id)
 		return 1
-	wfl = gbdx.Workflow([tsk])
-	wfl.savedata(tsk.outputs.data, location=s3_location + "/image2image/")
-	wfl.execute()
-	print('MTCD mosaic start', id, images1, wfl.id)
-	complete = False
-	while not complete:
-		try:
-			complete = wfl.complete
-			if not complete:
-				time.sleep(10)
-		except:
-			sys.stdout.write('.')
-	print('MTCD mosaic done ' + images1 + ' ' + images2 + ' ' + str(id) + ' ' + str(wfl.status) + ' at ' + str(datetime.now()))
-	if (not wfl.status["event"] == "succeeded"):
+	workflow = gbdx.Workflow([tsk])
+	workflow.savedata(tsk.outputs.data, location=s3_location + "/image2image/")
+	workflow.execute()
+	print('MTCD mosaic start', id, images1, workflow.id)
+	waitForWorkflow( workflow )
+	print('MTCD mosaic done ' + images1 + ' ' + images2 + ' ' + str(id) + ' ' + str(workflow.status) + ' at ' + str(datetime.now()))
+	if (not workflow.status["event"] == "succeeded"):
 		print('MTCD mosaic failed')
 		return 1
 	return 0
@@ -222,14 +201,7 @@ def changePrep( catalog_id, s3_location, clip = None ):
 		workflow.savedata(cloudTask.outputs.mask, location=s3_location)
 	workflow.execute()
 	print('AOP is processing image '+catalog_id+' MS workflow id is '+workflow.id)
-	complete = False
-	while not complete:
-		try:
-			complete = workflow.complete
-			if not complete:
-				time.sleep(60)
-		except:
-			sys.stdout.write('.')
+	waitForWorkflow( workflow )
 	print('MS      image '+catalog_id+' '+ str(workflow.status) + ' wfl id '+ workflow.id + ' at '+str(datetime.now()))
 	if ( not workflow.status["event"] == "succeeded" ):
 		print("workflow.status", workflow.status, workflow.status["event"] == "succeeded")
@@ -396,7 +368,7 @@ def order(gbdx, catalog_id):
 				time.sleep(60)
 		except:
 			sys.stdout.write('.')
-	prin('1B image delivered ' + gbdx.ordering.status(order_id)[0]['location'] + ' at '+str(datetime.now()))
+	print('1B image delivered ' + gbdx.ordering.status(order_id)[0]['location'] + ' at '+str(datetime.now()))
 	return order_id
 
 def image2image(ref_image_s3_dir, image_s3_dir, output_s3, source_filename=None, reference_filename=None, clip=None, pixelSize=2, fileName = None ):
