@@ -504,7 +504,11 @@ def printTaskOutputForID( workflowID ):
 def getS3location(gbdx, location):
 	#return 's3://gbd-customer-data/c8f66cb2-dac0-4883-8d93-12d68de252fe/'+ location
 	bucket = getS3bucket()
-	prefix = gbdx.s3.info['prefix']
+	try:
+		prefix = gbdx.s3.info['prefix']
+	except:
+		#AWS has some GATEWAY_TIMEOUT issues with it, try once more
+		prefix = gbdx.s3.info['prefix']
 	location = location.strip('/')
 	key = Key(bucket, prefix + '/' + location)
 	whats_in_here = bucket.list(prefix + '/' + location)
