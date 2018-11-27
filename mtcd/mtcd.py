@@ -231,6 +231,9 @@ def processChangeImages( catalog_ids_file, s3_location, clip = None, deleteInter
 def processChangeSet( idsets, s3_location, clip = None, deleteIntermediateFromS3 = False ):
 	start_time = time.time()
 	ids = []
+	if ( len(idsets) < 4 or len(idsets) > 6 ):
+		print("FATAL number of idsets has to be 4, 5, or 6. it is "+str(len(idsets)))
+		return
 	for idset in idsets:
 		for catid in idset:
 			ids.append(catid)
