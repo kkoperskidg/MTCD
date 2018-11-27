@@ -16,7 +16,7 @@ with open(req_path) as f:
 # long_description=readme,
 
 setup(name='mtcd',
-      version='1.0.1',
+      version='1.0.2',
       description='Mutltitemporal Change Detection Workflow MTCD.',
       classifiers=[],
       keywords='',
