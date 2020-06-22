@@ -1,0 +1,6 @@
+data_classification:
+  - company_proprietary
+
+poc:
+  - name: Kris Koperski
+    email: kris.koperski@maxar.com
